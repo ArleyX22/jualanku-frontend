@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard • Jualanku</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .user-info {
+      font-weight: 500;
+      color: #4b5563;
+    }
+    .btn {
+      padding: 10px 16px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #2563eb; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #cbd5e1;
+      color: #4b5563;
+    }
+    .btn-outline:hover {
+      background: #f1f5f9;
+    }
+    .form-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .form-group input {
+      flex: 1;
+      min-width: 200px;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .item-card {
+      background: white;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      border-left: 4px solid #10b981;
+    }
+    .item-name {
+      font-weight: 600;
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+    .item-qty {
+      color: #64748b;
+      font-size: 14px;
+    }
+    .item-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+    .item-actions button {
+      flex: 1;
+      padding: 6px;
+      font-size: 14px;
+    }
+    .btn-edit { background: #f59e0b; }
+    .btn-edit:hover { background: #d97706; }
+    .btn-delete { background: #ef4444; }
+    .btn-delete:hover { background: #dc2626; }
+
+    @media (max-width: 600px) {
+      .form-group { flex-direction: column; }
+      header { flex-direction: column; gap: 12px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div>
+        <h1>📦 Daftar Penjualan</h1>
+        <div class="user-info">Halo, <span id="username">User</span>!</div>
+      </div>
+      <button class="btn btn-outline" onclick="logout()">🚪 Logout</button>
+    </header>
+
+    <div class="form-group">
+      <input type="text" id="item-name" placeholder="Nama barang (misal: Buku Tulis)" />
+      <input type="number" id="item-qty" placeholder="Jumlah" min="1" />
+      <button class="btn" onclick="addItem()">➕ Tambah</button>
+    </div>
+
+    <div id="items-container" class="items-grid">
+      <!-- Item cards akan diisi via JS -->
+    </div>
+
+    <div id="loading" style="text-align:center; padding:40px; display:none">
+      <div style="font-size:18px; color:#64748b">Memuat data...</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'https://jualanku-api.vercel.app/api';
+    let token = localStorage.getItem('token');
+    let user = JSON.parse(localStorage.getItem('user'));
+
+    // Redirect ke login jika belum login
+    if (!token || !user) {
+      alert('Silakan login dulu!');
+      window.location.href = 'login.html';
+    } else {
+      document.getElementById('username').textContent = user.username;
+      loadItems();
+    }
+
+    async function loadItems() {
+      const container = document.getElementById('items-container');
+      const loading = document.getElementById('loading');
+      container.innerHTML = '';
+      loading.style.display = 'block';
+
+      try {
+        const res = await fetch(`${API_BASE}/items`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const data = await res.json();
+        loading.style.display = 'none';
+
+        if (res.ok) {
+          if (data.items.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
+          } else {
+            container.innerHTML = data.items.map(item => `
+              <div class="item-card">
+                <div class="item-name">${escapeHtml(item.name)}</div>
+                <div class="item-qty">Qty: ${item.qty}</div>
+                <div class="item-actions">
+                  <button class="btn btn-edit" onclick="editItem(${item.id}, '${escapeHtml(item.name)}', ${item.qty})">✏️ Edit</button>
+                  <button class="btn btn-delete" onclick="deleteItem(${item.id})">🗑️ Hapus</button>
+                </div>
+              </div>
+            `).join('');
+          }
+        } else {
+          container.innerHTML = `<p style="color:#e53e3e">Gagal memuat data: ${data.error}</p>`;
+        }
+      } catch (err) {
+        loading.style.display = 'none';
+        container.innerHTML = `<p style="color:#e53e3e">Error koneksi ke server.</p>`;
+        console.error(err);
+      }
+    }
+
+    async function addItem() {
+      const name = document.getElementById('item-name').value.trim();
+      const qty = parseInt(document.getElementById('item-qty').value);
+      if (!name || isNaN(qty) || qty < 1) {
+        alert('Isi nama dan jumlah dengan benar!');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/items`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ name, qty })
+        });
+
+        if (res.ok) {
+          document.getElementById('item-name').value = '';
+          document.getElementById('item-qty').value = '';
+          loadItems();
+        } else {
+          const data = await res.json();
+          alert('Gagal menambah: ' + (data.error || 'server error'));
+        }
+      } catch (err) {
+        alert('Gagal terhubung ke server');
+      }
+    }
+
+    async function editItem(id, name, qty) {
+      const newName = prompt('Ubah nama:', name);
+      if (newName === null) return;
+      const newQty = prompt('Ubah jumlah:', qty);
+      if (newQty === null || isNaN(newQty) || newQty < 1) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/items?id=${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ name: newName.trim(), qty: parseInt(newQty) })
+        });
+
+        if (res.ok) {
+          loadItems();
+        } else {
+          alert('Gagal mengedit item');
+        }
+      } catch (err) {
+        alert('Error saat edit');
+      }
+    }
+
+    async function deleteItem(id) {
+      if (!confirm('Yakin hapus item ini?')) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/items?id=${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          loadItems();
+        } else {
+          alert('Gagal menghapus item');
+        }
+      } catch (err) {
+        alert('Error saat hapus');
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = 'login.html';
+    }
+
+    // Escape HTML untuk hindari XSS
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+
+</body>
+</html>
