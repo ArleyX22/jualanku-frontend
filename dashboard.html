@@ -167,26 +167,22 @@
   </div>
 
   <script>
-    // ✅ URL benar — tanpa spasi!
+    // ✅ FIX: HAPUS SPASI DI AKHIR URL!
     const API_BASE = 'https://jualanku-api.vercel.app/api';
     let token = localStorage.getItem('token');
     let user = JSON.parse(localStorage.getItem('user'));
 
-    // Fungsi tampilkan error ke layar (tanpa F12)
     function showError(message) {
       document.getElementById('error-text').innerText = message;
       document.getElementById('error-overlay').style.display = 'flex';
     }
 
-    // Cek login
     if (!token || !user || !user.id) {
       showError('❌ Anda belum login.\nKembali ke halaman login.');
-      setTimeout(() => {
-        window.location.href = 'login.html';
-      }, 3000);
+      setTimeout(() => window.location.href = 'login.html', 3000);
     } else {
       document.getElementById('username').textContent = user.username || 'User';
-      setTimeout(loadItems, 500); // delay sedikit agar DOM siap
+      setTimeout(loadItems, 500);
     }
 
     async function loadItems() {
@@ -195,31 +191,13 @@
 
       try {
         const res = await fetch(`${API_BASE}/items`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!res.ok) {
-          let errorText = `HTTP ${res.status}`;
-          try {
-            const data = await res.json();
-            errorText += `: ${data.error || 'Unknown error'}`;
-          } catch (e) {
-            // Jika gagal parse JSON, coba baca sebagai teks
-            const text = await res.text();
-            if (text.includes('404')) errorText = 'API tidak ditemukan (404)';
-            else if (text.includes('500')) errorText = 'Server error (500)';
-            else errorText += ` — ${text.substring(0, 100)}...`;
-          }
-          throw new Error(errorText);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
         const data = await res.json();
-
-        if (data.items && data.items.length > 0) {
+        if (data.items?.length > 0) {
           container.innerHTML = data.items.map(item => `
             <div class="item-card">
               <div class="item-name">${escapeHtml(item.name)}</div>
@@ -234,9 +212,7 @@
           container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
         }
       } catch (err) {
-        const msg = `Gagal memuat data:\n${err.message}`;
-        showError(msg);
-        console.log(msg); // tetap log ke console (jika bisa)
+        showError(`Gagal memuat data:\n${err.message}`);
       }
     }
 
@@ -244,7 +220,7 @@
       const name = document.getElementById('item-name').value.trim();
       const qty = parseInt(document.getElementById('item-qty').value);
       if (!name || isNaN(qty) || qty < 1) {
-        showError('⚠️ Nama dan jumlah wajib diisi,\ndan jumlah harus angka ≥ 1.');
+        showError('⚠️ Nama dan jumlah wajib diisi.');
         return;
       }
 
@@ -258,17 +234,7 @@
           body: JSON.stringify({ name, qty })
         });
 
-        if (!res.ok) {
-          let errorText = `HTTP ${res.status}`;
-          try {
-            const data = await res.json();
-            errorText = data.error || errorText;
-          } catch (e) {
-            const text = await res.text();
-            errorText += ` — ${text.substring(0, 100)}...`;
-          }
-          throw new Error(errorText);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
         document.getElementById('item-name').value = '';
         document.getElementById('item-qty').value = '';
@@ -278,19 +244,20 @@
       }
     }
 
+    // ✅ FIX: Edit Item — pastikan id dikirim sebagai query param
     async function editItem(id, name, qty) {
       const newName = prompt('Ubah nama:', name);
       if (newName === null) return;
-      const newQtyStr = prompt('Ubah jumlah:', qty);
-      if (newQtyStr === null) return;
-      const newQty = parseInt(newQtyStr);
+      const newQty = parseInt(prompt('Ubah jumlah:', qty));
       if (isNaN(newQty) || newQty < 1) {
         alert('Jumlah harus angka ≥ 1');
         return;
       }
 
       try {
-        const res = await fetch(`${API_BASE}/items?id=${encodeURIComponent(id)}`, {
+        // ✅ URL benar: /items?id=123 (tanpa encode berlebihan)
+        const url = `${API_BASE}/items?id=${id}`;
+        const res = await fetch(url, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -299,44 +266,26 @@
           body: JSON.stringify({ name: newName.trim(), qty: newQty })
         });
 
-        if (!res.ok) {
-          let errorText = `HTTP ${res.status}`;
-          try {
-            const data = await res.json();
-            errorText = data.error || errorText;
-          } catch (e) {
-            const text = await res.text();
-            errorText += ` — ${text.substring(0, 100)}...`;
-          }
-          throw new Error(errorText);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
-        loadItems();
+        loadItems(); // Refresh data
       } catch (err) {
         showError(`❌ Gagal edit item:\n${err.message}`);
       }
     }
 
+    // ✅ FIX: Delete Item — pastikan id di URL
     async function deleteItem(id) {
       if (!confirm('Yakin hapus item ini?')) return;
 
       try {
-        const res = await fetch(`${API_BASE}/items?id=${encodeURIComponent(id)}`, {
+        const url = `${API_BASE}/items?id=${id}`;
+        const res = await fetch(url, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!res.ok) {
-          let errorText = `HTTP ${res.status}`;
-          try {
-            const data = await res.json();
-            errorText = data.error || errorText;
-          } catch (e) {
-            const text = await res.text();
-            errorText += ` — ${text.substring(0, 100)}...`;
-          }
-          throw new Error(errorText);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
         loadItems();
       } catch (err) {
