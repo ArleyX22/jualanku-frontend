@@ -199,21 +199,44 @@
         const data = await res.json();
         if (data.items?.length > 0) {
           container.innerHTML = data.items.map(item => `
-            <div class="item-card">
+            <div class="item-card" data-id="${item.id}">
               <div class="item-name">${escapeHtml(item.name)}</div>
               <div class="item-qty">Qty: ${item.qty}</div>
               <div class="item-actions">
-                <button class="btn btn-edit" onclick="editItem(${item.id}, ${JSON.stringify(item.name)}, ${item.qty})">✏️ Edit</button>
-                <button class="btn btn-delete" onclick="deleteItem(${item.id})">🗑️ Hapus</button>
+                <button class="btn btn-edit" data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-qty="${item.qty}">✏️ Edit</button>
+                <button class="btn btn-delete" data-id="${item.id}">🗑️ Hapus</button>
               </div>
             </div>
           `).join('');
+
+          // Attach event listeners after DOM is rendered
+          attachEventListeners();
         } else {
           container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
         }
       } catch (err) {
         showError(`Gagal memuat data:\n${err.message}`);
       }
+    }
+
+    function attachEventListeners() {
+      // Edit buttons
+      document.querySelectorAll('.btn-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.id);
+          const name = btn.dataset.name;
+          const qty = parseInt(btn.dataset.qty);
+          editItem(id, name, qty);
+        });
+      });
+
+      // Delete buttons
+      document.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.id);
+          deleteItem(id);
+        });
+      });
     }
 
     async function addItem() {
@@ -244,7 +267,6 @@
       }
     }
 
-    // ✅ FIX: Edit Item — pastikan id dikirim sebagai query param
     async function editItem(id, name, qty) {
       const newName = prompt('Ubah nama:', name);
       if (newName === null) return;
@@ -255,7 +277,6 @@
       }
 
       try {
-        // ✅ URL benar: /items?id=123 (tanpa encode berlebihan)
         const url = `${API_BASE}/items?id=${id}`;
         const res = await fetch(url, {
           method: 'PUT',
@@ -268,13 +289,12 @@
 
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
-        loadItems(); // Refresh data
+        loadItems();
       } catch (err) {
         showError(`❌ Gagal edit item:\n${err.message}`);
       }
     }
 
-    // ✅ FIX: Delete Item — pastikan id di URL
     async function deleteItem(id) {
       if (!confirm('Yakin hapus item ini?')) return;
 
