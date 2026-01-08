@@ -134,6 +134,7 @@
   </div>
 
   <script>
+    // ✅ FIX: HAPUS SPASI DI AKHIR URL!
     const API_BASE = 'https://jualanku-api.vercel.app/api';
     let token = localStorage.getItem('token');
     let user = JSON.parse(localStorage.getItem('user'));
@@ -158,31 +159,33 @@
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
+        // ✅ Cek status lebih detail
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errorText || 'Unknown error'}`);
+        }
+
         const data = await res.json();
         loading.style.display = 'none';
 
-        if (res.ok) {
-          if (data.items.length === 0) {
-            container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
-          } else {
-            container.innerHTML = data.items.map(item => `
-              <div class="item-card">
-                <div class="item-name">${escapeHtml(item.name)}</div>
-                <div class="item-qty">Qty: ${item.qty}</div>
-                <div class="item-actions">
-                  <button class="btn btn-edit" onclick="editItem(${item.id}, '${escapeHtml(item.name)}', ${item.qty})">✏️ Edit</button>
-                  <button class="btn btn-delete" onclick="deleteItem(${item.id})">🗑️ Hapus</button>
-                </div>
+        if (data.items && data.items.length > 0) {
+          container.innerHTML = data.items.map(item => `
+            <div class="item-card">
+              <div class="item-name">${escapeHtml(item.name)}</div>
+              <div class="item-qty">Qty: ${item.qty}</div>
+              <div class="item-actions">
+                <button class="btn btn-edit" onclick="editItem(${item.id}, ${JSON.stringify(item.name)}, ${item.qty})">✏️ Edit</button>
+                <button class="btn btn-delete" onclick="deleteItem(${item.id})">🗑️ Hapus</button>
               </div>
-            `).join('');
-          }
+            </div>
+          `).join('');
         } else {
-          container.innerHTML = `<p style="color:#e53e3e">Gagal memuat data: ${data.error}</p>`;
+          container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
         }
       } catch (err) {
         loading.style.display = 'none';
-        container.innerHTML = `<p style="color:#e53e3e">Error koneksi ke server.</p>`;
-        console.error(err);
+        console.error('Load items error:', err);
+        container.innerHTML = `<p style="color:#e53e3e; text-align:center">Gagal memuat data: ${err.message}</p>`;
       }
     }
 
@@ -204,42 +207,50 @@
           body: JSON.stringify({ name, qty })
         });
 
-        if (res.ok) {
-          document.getElementById('item-name').value = '';
-          document.getElementById('item-qty').value = '';
-          loadItems();
-        } else {
-          const data = await res.json();
-          alert('Gagal menambah: ' + (data.error || 'server error'));
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
         }
+
+        document.getElementById('item-name').value = '';
+        document.getElementById('item-qty').value = '';
+        loadItems();
       } catch (err) {
-        alert('Gagal terhubung ke server');
+        alert('Gagal menambah item: ' + err.message);
+        console.error(err);
       }
     }
 
     async function editItem(id, name, qty) {
       const newName = prompt('Ubah nama:', name);
       if (newName === null) return;
-      const newQty = prompt('Ubah jumlah:', qty);
-      if (newQty === null || isNaN(newQty) || newQty < 1) return;
+      const newQtyStr = prompt('Ubah jumlah:', qty);
+      if (newQtyStr === null) return;
+      const newQty = parseInt(newQtyStr);
+      if (isNaN(newQty) || newQty < 1) {
+        alert('Jumlah harus angka ≥ 1');
+        return;
+      }
 
       try {
-        const res = await fetch(`${API_BASE}/items?id=${id}`, {
+        const res = await fetch(`${API_BASE}/items?id=${encodeURIComponent(id)}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ name: newName.trim(), qty: parseInt(newQty) })
+          body: JSON.stringify({ name: newName.trim(), qty: newQty })
         });
 
-        if (res.ok) {
-          loadItems();
-        } else {
-          alert('Gagal mengedit item');
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
         }
+
+        loadItems();
       } catch (err) {
-        alert('Error saat edit');
+        alert('Gagal mengedit: ' + err.message);
+        console.error(err);
       }
     }
 
@@ -247,18 +258,20 @@
       if (!confirm('Yakin hapus item ini?')) return;
 
       try {
-        const res = await fetch(`${API_BASE}/items?id=${id}`, {
+        const res = await fetch(`${API_BASE}/items?id=${encodeURIComponent(id)}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (res.ok) {
-          loadItems();
-        } else {
-          alert('Gagal menghapus item');
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
         }
+
+        loadItems();
       } catch (err) {
-        alert('Error saat hapus');
+        alert('Gagal menghapus: ' + err.message);
+        console.error(err);
       }
     }
 
