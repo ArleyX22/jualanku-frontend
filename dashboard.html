@@ -101,6 +101,34 @@
     .btn-delete { background: #ef4444; }
     .btn-delete:hover { background: #dc2626; }
 
+    #error-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    #error-message {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      max-width: 600px;
+      text-align: left;
+    }
+    #error-message h3 {
+      color: #e53e3e;
+      margin-bottom: 12px;
+    }
+    #error-message pre {
+      background: #f8fafc;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 14px;
+    }
     @media (max-width: 600px) {
       .form-group { flex-direction: column; }
       header { flex-direction: column; gap: 12px; text-align: center; }
@@ -108,6 +136,15 @@
   </style>
 </head>
 <body>
+
+  <div id="error-overlay" style="display:none">
+    <div id="error-message">
+      <h3>❌ Terjadi Kesalahan</h3>
+      <p id="error-text"></p>
+      <button class="btn" onclick="document.getElementById('error-overlay').style.display='none'">Tutup</button>
+      <button class="btn btn-outline" onclick="window.location.href='login.html'">Kembali ke Login</button>
+    </div>
+  </div>
 
   <div class="container">
     <header>
@@ -125,48 +162,62 @@
     </div>
 
     <div id="items-container" class="items-grid">
-      <!-- Item cards akan diisi via JS -->
-    </div>
-
-    <div id="loading" style="text-align:center; padding:40px; display:none">
-      <div style="font-size:18px; color:#64748b">Memuat data...</div>
+      <p style="text-align:center;color:#64748b">Memuat data...</p>
     </div>
   </div>
 
   <script>
-    // ✅ FIX: HAPUS SPASI DI AKHIR URL!
+    // ✅ URL benar — tanpa spasi!
     const API_BASE = 'https://jualanku-api.vercel.app/api';
     let token = localStorage.getItem('token');
     let user = JSON.parse(localStorage.getItem('user'));
 
-    // Redirect ke login jika belum login
-    if (!token || !user) {
-      alert('Silakan login dulu!');
-      window.location.href = 'login.html';
+    // Fungsi tampilkan error ke layar (tanpa F12)
+    function showError(message) {
+      document.getElementById('error-text').innerText = message;
+      document.getElementById('error-overlay').style.display = 'flex';
+    }
+
+    // Cek login
+    if (!token || !user || !user.id) {
+      showError('❌ Anda belum login.\nKembali ke halaman login.');
+      setTimeout(() => {
+        window.location.href = 'login.html';
+      }, 3000);
     } else {
-      document.getElementById('username').textContent = user.username;
-      loadItems();
+      document.getElementById('username').textContent = user.username || 'User';
+      setTimeout(loadItems, 500); // delay sedikit agar DOM siap
     }
 
     async function loadItems() {
       const container = document.getElementById('items-container');
-      const loading = document.getElementById('loading');
-      container.innerHTML = '';
-      loading.style.display = 'block';
+      container.innerHTML = '<p style="text-align:center;color:#64748b">Memuat data...</p>';
 
       try {
         const res = await fetch(`${API_BASE}/items`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         });
 
-        // ✅ Cek status lebih detail
         if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errorText || 'Unknown error'}`);
+          let errorText = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            errorText += `: ${data.error || 'Unknown error'}`;
+          } catch (e) {
+            // Jika gagal parse JSON, coba baca sebagai teks
+            const text = await res.text();
+            if (text.includes('404')) errorText = 'API tidak ditemukan (404)';
+            else if (text.includes('500')) errorText = 'Server error (500)';
+            else errorText += ` — ${text.substring(0, 100)}...`;
+          }
+          throw new Error(errorText);
         }
 
         const data = await res.json();
-        loading.style.display = 'none';
 
         if (data.items && data.items.length > 0) {
           container.innerHTML = data.items.map(item => `
@@ -183,9 +234,9 @@
           container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
         }
       } catch (err) {
-        loading.style.display = 'none';
-        console.error('Load items error:', err);
-        container.innerHTML = `<p style="color:#e53e3e; text-align:center">Gagal memuat data: ${err.message}</p>`;
+        const msg = `Gagal memuat data:\n${err.message}`;
+        showError(msg);
+        console.log(msg); // tetap log ke console (jika bisa)
       }
     }
 
@@ -193,7 +244,7 @@
       const name = document.getElementById('item-name').value.trim();
       const qty = parseInt(document.getElementById('item-qty').value);
       if (!name || isNaN(qty) || qty < 1) {
-        alert('Isi nama dan jumlah dengan benar!');
+        showError('⚠️ Nama dan jumlah wajib diisi,\ndan jumlah harus angka ≥ 1.');
         return;
       }
 
@@ -208,16 +259,22 @@
         });
 
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `HTTP ${res.status}`);
+          let errorText = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            errorText = data.error || errorText;
+          } catch (e) {
+            const text = await res.text();
+            errorText += ` — ${text.substring(0, 100)}...`;
+          }
+          throw new Error(errorText);
         }
 
         document.getElementById('item-name').value = '';
         document.getElementById('item-qty').value = '';
         loadItems();
       } catch (err) {
-        alert('Gagal menambah item: ' + err.message);
-        console.error(err);
+        showError(`❌ Gagal menambah item:\n${err.message}`);
       }
     }
 
@@ -243,14 +300,20 @@
         });
 
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `HTTP ${res.status}`);
+          let errorText = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            errorText = data.error || errorText;
+          } catch (e) {
+            const text = await res.text();
+            errorText += ` — ${text.substring(0, 100)}...`;
+          }
+          throw new Error(errorText);
         }
 
         loadItems();
       } catch (err) {
-        alert('Gagal mengedit: ' + err.message);
-        console.error(err);
+        showError(`❌ Gagal edit item:\n${err.message}`);
       }
     }
 
@@ -264,14 +327,20 @@
         });
 
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `HTTP ${res.status}`);
+          let errorText = `HTTP ${res.status}`;
+          try {
+            const data = await res.json();
+            errorText = data.error || errorText;
+          } catch (e) {
+            const text = await res.text();
+            errorText += ` — ${text.substring(0, 100)}...`;
+          }
+          throw new Error(errorText);
         }
 
         loadItems();
       } catch (err) {
-        alert('Gagal menghapus: ' + err.message);
-        console.error(err);
+        showError(`❌ Gagal hapus item:\n${err.message}`);
       }
     }
 
@@ -281,7 +350,6 @@
       window.location.href = 'login.html';
     }
 
-    // Escape HTML untuk hindari XSS
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
