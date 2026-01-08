@@ -76,6 +76,7 @@
       padding: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
       border-left: 4px solid #10b981;
+      position: relative;
     }
     .item-name {
       font-weight: 600;
@@ -100,6 +101,28 @@
     .btn-edit:hover { background: #d97706; }
     .btn-delete { background: #ef4444; }
     .btn-delete:hover { background: #dc2626; }
+
+    /* Edit Form Style */
+    .edit-form {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      border-radius: 6px;
+    }
+    .edit-form input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+    }
+    .edit-form button {
+      margin-right: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+    }
 
     #error-overlay {
       position: fixed;
@@ -167,7 +190,6 @@
   </div>
 
   <script>
-    // ✅ FIX: HAPUS SPASI DI AKHIR URL!
     const API_BASE = 'https://jualanku-api.vercel.app/api';
     let token = localStorage.getItem('token');
     let user = JSON.parse(localStorage.getItem('user'));
@@ -206,10 +228,16 @@
                 <button class="btn btn-edit" data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-qty="${item.qty}">✏️ Edit</button>
                 <button class="btn btn-delete" data-id="${item.id}">🗑️ Hapus</button>
               </div>
+              <!-- Edit Form (hidden by default) -->
+              <div class="edit-form" id="edit-form-${item.id}">
+                <input type="text" id="edit-name-${item.id}" value="${escapeHtml(item.name)}" placeholder="Nama baru" />
+                <input type="number" id="edit-qty-${item.id}" value="${item.qty}" min="1" placeholder="Jumlah baru" />
+                <button class="btn" onclick="saveEdit(${item.id})">✅ Simpan</button>
+                <button class="btn btn-outline" onclick="cancelEdit(${item.id})">Batal</button>
+              </div>
             </div>
           `).join('');
 
-          // Attach event listeners after DOM is rendered
           attachEventListeners();
         } else {
           container.innerHTML = '<p style="text-align:center;color:#64748b">Belum ada data penjualan.</p>';
@@ -224,9 +252,7 @@
       document.querySelectorAll('.btn-edit').forEach(btn => {
         btn.addEventListener('click', () => {
           const id = parseInt(btn.dataset.id);
-          const name = btn.dataset.name;
-          const qty = parseInt(btn.dataset.qty);
-          editItem(id, name, qty);
+          showEditForm(id);
         });
       });
 
@@ -237,6 +263,59 @@
           deleteItem(id);
         });
       });
+    }
+
+    function showEditForm(id) {
+      // Sembunyikan semua edit form dulu
+      document.querySelectorAll('.edit-form').forEach(form => {
+        form.style.display = 'none';
+      });
+
+      // Tampilkan form untuk item ini
+      const form = document.getElementById(`edit-form-${id}`);
+      if (form) {
+        form.style.display = 'block';
+      }
+    }
+
+    function cancelEdit(id) {
+      const form = document.getElementById(`edit-form-${id}`);
+      if (form) {
+        form.style.display = 'none';
+      }
+    }
+
+    async function saveEdit(id) {
+      const nameInput = document.getElementById(`edit-name-${id}`);
+      const qtyInput = document.getElementById(`edit-qty-${id}`);
+
+      const newName = nameInput.value.trim();
+      const newQty = parseInt(qtyInput.value);
+
+      if (!newName || isNaN(newQty) || newQty < 1) {
+        showError('⚠️ Nama dan jumlah wajib diisi.');
+        return;
+      }
+
+      try {
+        const url = `${API_BASE}/items?id=${id}`;
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ name: newName, qty: newQty })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        // Tutup form & refresh
+        cancelEdit(id);
+        loadItems();
+      } catch (err) {
+        showError(`❌ Gagal simpan edit:\n${err.message}`);
+      }
     }
 
     async function addItem() {
@@ -264,34 +343,6 @@
         loadItems();
       } catch (err) {
         showError(`❌ Gagal menambah item:\n${err.message}`);
-      }
-    }
-
-    async function editItem(id, name, qty) {
-      const newName = prompt('Ubah nama:', name);
-      if (newName === null) return;
-      const newQty = parseInt(prompt('Ubah jumlah:', qty));
-      if (isNaN(newQty) || newQty < 1) {
-        alert('Jumlah harus angka ≥ 1');
-        return;
-      }
-
-      try {
-        const url = `${API_BASE}/items?id=${id}`;
-        const res = await fetch(url, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ name: newName.trim(), qty: newQty })
-        });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-
-        loadItems();
-      } catch (err) {
-        showError(`❌ Gagal edit item:\n${err.message}`);
       }
     }
 
